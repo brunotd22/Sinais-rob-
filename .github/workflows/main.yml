@@ -23,5 +23,4 @@ jobs:
 
       - name: Executar robo
         env:
-          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
-        run: python Robo.py
+          TWELVE_DATA_API_KEY: ${{ secrets.TWELVE
