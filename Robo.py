@@ -1,4 +1,3 @@
-```python
 import os
 import requests
 
@@ -11,7 +10,6 @@ def obter_cotacao():
         return
 
     url = "https://api.twelvedata.com/price"
-
     parametros = {
         "symbol": "EUR/USD",
         "apikey": API_KEY
@@ -32,4 +30,3 @@ def obter_cotacao():
 
 if __name__ == "__main__":
     obter_cotacao()
-```
