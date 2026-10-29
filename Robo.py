@@ -3,7 +3,6 @@ import requests
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
-
 def obter_cotacao():
     if not API_KEY:
         print("ERRO: Configure a chave TWELVE_DATA_API_KEY.")
@@ -26,7 +25,6 @@ def obter_cotacao():
 
     except requests.RequestException as erro:
         print("Erro de conexão:", erro)
-
 
 if __name__ == "__main__":
     obter_cotacao()
