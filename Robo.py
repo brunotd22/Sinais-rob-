@@ -1,3 +1,4 @@
+
 import os
 import requests
 
@@ -5,7 +6,7 @@ API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 
 def obter_cotacao():
     if not API_KEY:
-        print("ERRO: Configure a chave TWELVE_DATA_API_KEY.")
+        print("ERRO: Chave da Twelve Data não configurada.")
         return
 
     url = "https://api.twelvedata.com/price"
@@ -15,16 +16,17 @@ def obter_cotacao():
     }
 
     try:
-        resposta = requests.get(url, params=parametros, timeout=15)
+        resposta = requests.get(url, params=parametros, timeout=20)
+        resposta.raise_for_status()
         dados = resposta.json()
 
         if "price" in dados:
-            print("Cotação EUR/USD:", dados["price"])
+            print("EUR/USD:", dados["price"])
         else:
-            print("Resposta da API:", dados)
+            print("ERRO DA API:", dados)
 
     except requests.RequestException as erro:
-        print("Erro de conexão:", erro)
+        print("ERRO DE CONEXÃO:", erro)
 
 if __name__ == "__main__":
     obter_cotacao()
