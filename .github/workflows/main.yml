@@ -23,4 +23,4 @@ jobs:
       - name: Consultar EUR/USD
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
-        run: python robo.py
+        run: python Robo.py
