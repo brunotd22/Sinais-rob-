@@ -1,16 +1,15 @@
-name: Testar Robo de Sinais
+
+name: Robo de Sinais
 
 on:
   workflow_dispatch:
-  schedule:
-    - cron: "*/5 * * * *"
 
 jobs:
-  executar-robo:
+  cotacao:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar arquivos
+      - name: Baixar projeto
         uses: actions/checkout@v4
 
       - name: Configurar Python
@@ -21,7 +20,7 @@ jobs:
       - name: Instalar dependencias
         run: pip install requests
 
-      - name: Executar robo
+      - name: Consultar EUR/USD
         env:
           TWELVE_DATA_API_KEY: ${{ secrets.TWELVE_DATA_API_KEY }}
-        run: python Robo.py
+        run: python robo.py
