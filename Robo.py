@@ -14,6 +14,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 URL = "https://api.twelvedata.com/time_series"
 ARQUIVO = "historico.json"
 FUSO = ZoneInfo("America/Sao_Paulo")
+META = 100
 
 
 def obter_candles(intervalo, quantidade=100):
@@ -77,10 +78,7 @@ def enviar_telegram(texto):
 
     resposta = requests.post(
         f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
-        data={
-            "chat_id": TELEGRAM_CHAT_ID,
-            "text": texto
-        },
+        data={"chat_id": TELEGRAM_CHAT_ID, "text": texto},
         timeout=30
     )
 
@@ -90,10 +88,15 @@ def enviar_telegram(texto):
 
 def carregar_historico():
     if not os.path.exists(ARQUIVO):
-        return {"sinais": []}
+        return {"sinais": [], "aviso_100_enviado": False}
 
     with open(ARQUIVO, "r", encoding="utf-8") as arquivo:
-        return json.load(arquivo)
+        historico = json.load(arquivo)
+
+    historico.setdefault("sinais", [])
+    historico.setdefault("aviso_100_enviado", False)
+
+    return historico
 
 
 def salvar_historico(historico):
@@ -112,8 +115,7 @@ def avaliar_pendentes(historico, candles1):
             continue
 
         hora_candle = datetime.strptime(
-            sinal["horario_candle"],
-            "%Y-%m-%d %H:%M:%S"
+            sinal["horario_candle"], "%Y-%m-%d %H:%M:%S"
         )
 
         hora_entrada = hora_candle + timedelta(minutes=5)
@@ -123,8 +125,7 @@ def avaliar_pendentes(historico, candles1):
 
         for candle in candles1:
             hora = datetime.strptime(
-                candle["datetime"],
-                "%Y-%m-%d %H:%M:%S"
+                candle["datetime"], "%Y-%m-%d %H:%M:%S"
             )
 
             if hora == hora_saida and hora <= limite_fechamento:
@@ -146,25 +147,20 @@ def avaliar_pendentes(historico, candles1):
 
         sinal["saida"] = saida
         sinal["resultado"] = resultado
-
         sinal["horario_entrada"] = hora_entrada.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
-
         sinal["horario_saida"] = hora_saida.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
 
-        mensagem = (
+        enviar_telegram(
             "📊 RESULTADO SIMULADO\n"
             f"EUR/USD: {sinal['direcao']}\n"
             f"Entrada: {entrada}\n"
             f"Saída: {saida}\n"
             f"Resultado: {resultado}"
         )
-
-        print(mensagem)
-        enviar_telegram(mensagem)
 
         alterou = True
 
@@ -174,28 +170,65 @@ def avaliar_pendentes(historico, candles1):
 def gerar_relatorio(historico):
     sinais = historico["sinais"]
 
-    acertos = sum(s["resultado"] == "ACERTO" for s in sinais)
-    erros = sum(s["resultado"] == "ERRO" for s in sinais)
-    empates = sum(s["resultado"] == "EMPATE" for s in sinais)
-    pendentes = sum(s["resultado"] == "PENDENTE" for s in sinais)
+    avaliados = [
+        s for s in sinais
+        if s["resultado"] in ("ACERTO", "ERRO", "EMPATE")
+    ]
+
+    acertos = sum(s["resultado"] == "ACERTO" for s in avaliados)
+    erros = sum(s["resultado"] == "ERRO" for s in avaliados)
+    empates = sum(s["resultado"] == "EMPATE" for s in avaliados)
 
     total = acertos + erros
+    percentual = acertos / total * 100 if total else 0
 
-    percentual = (
-        (acertos / total) * 100
-        if total > 0 else 0
-    )
+    linhas = [
+        "📈 RELATÓRIO DO TESTE",
+        "Ativo: EUR/USD",
+        f"Sinais registrados: {len(sinais)}/{META}",
+        f"Avaliados: {len(avaliados)}",
+        f"Acertos: {acertos}",
+        f"Erros: {erros}",
+        f"Empates: {empates}",
+        f"Pendentes: {len(sinais) - len(avaliados)}",
+        f"Taxa de acerto: {percentual:.1f}%",
+        "",
+        "📌 POR DIREÇÃO"
+    ]
 
-    return (
-        "📈 DESEMPENHO SIMULADO\n"
-        "Ativo: EUR/USD\n"
-        f"Sinais avaliados: {total}\n"
-        f"Acertos: {acertos}\n"
-        f"Erros: {erros}\n"
-        f"Empates: {empates}\n"
-        f"Pendentes: {pendentes}\n"
-        f"Taxa de acerto: {percentual:.1f}%"
-    )
+    for direcao in ("CALL", "PUT"):
+        grupo = [s for s in avaliados if s["direcao"] == direcao]
+        wins = sum(s["resultado"] == "ACERTO" for s in grupo)
+        losses = sum(s["resultado"] == "ERRO" for s in grupo)
+        total_dir = wins + losses
+        taxa = wins / total_dir * 100 if total_dir else 0
+
+        linhas.append(
+            f"{direcao}: {wins} acertos / {losses} erros "
+            f"({taxa:.1f}%)"
+        )
+
+    linhas.extend(["", "🕒 POR HORÁRIO"])
+
+    horarios = {}
+
+    for sinal in avaliados:
+        hora = sinal["horario_candle"][11:13]
+        horarios.setdefault(hora, {"acertos": 0, "erros": 0})
+
+        if sinal["resultado"] == "ACERTO":
+            horarios[hora]["acertos"] += 1
+        elif sinal["resultado"] == "ERRO":
+            horarios[hora]["erros"] += 1
+
+    for hora in sorted(horarios):
+        dados = horarios[hora]
+        linhas.append(
+            f"{hora}h: {dados['acertos']} acertos / "
+            f"{dados['erros']} erros"
+        )
+
+    return "\n".join(linhas)
 
 
 def salvar_no_github():
@@ -207,12 +240,10 @@ def salvar_no_github():
         ["git", "config", "user.name", "Robo de Sinais"],
         check=True
     )
-
     subprocess.run(
         ["git", "config", "user.email", "bot@github.com"],
         check=True
     )
-
     subprocess.run(["git", "add", ARQUIVO], check=True)
 
     resultado = subprocess.run(
@@ -227,7 +258,6 @@ def salvar_no_github():
         ["git", "commit", "-m", "Atualizar histórico de sinais"],
         check=True
     )
-
     subprocess.run(["git", "push"], check=True)
 
     print("Histórico salvo no GitHub!")
@@ -245,75 +275,75 @@ def executar():
 
     historico = carregar_historico()
 
-    # Avalia sinais anteriores
-    mudou_resultado = avaliar_pendentes(
-        historico,
-        candles1
+    mudou_resultado = avaliar_pendentes(historico, candles1)
+
+    sinais = historico["sinais"]
+    avaliados = sum(
+        s["resultado"] != "PENDENTE" for s in sinais
     )
 
-    # Identifica nova direção
-    if direcao5 == "ALTA" and direcao1 == "ALTA":
-        sinal = "CALL"
+    # Só gera sinais enquanto não atingir 100 registrados
+    if len(sinais) < META:
+        if direcao5 == "ALTA" and direcao1 == "ALTA":
+            sinal = "CALL"
+        elif direcao5 == "BAIXA" and direcao1 == "BAIXA":
+            sinal = "PUT"
+        else:
+            sinal = "AGUARDAR"
 
-    elif direcao5 == "BAIXA" and direcao1 == "BAIXA":
-        sinal = "PUT"
+        candle_sinal = candles5[-2]
+        horario_candle = candle_sinal["datetime"]
+        entrada = float(candle_sinal["close"])
 
-    else:
-        sinal = "AGUARDAR"
-
-    candle_sinal = candles5[-2]
-
-    horario_candle = candle_sinal["datetime"]
-    entrada = float(candle_sinal["close"])
-
-    existe = any(
-        s["horario_candle"] == horario_candle
-        for s in historico["sinais"]
-    )
-
-    novo_sinal = False
-
-    # Só envia se realmente for um sinal novo
-    if sinal != "AGUARDAR" and not existe:
-
-        historico["sinais"].append({
-            "direcao": sinal,
-            "horario_candle": horario_candle,
-            "entrada": entrada,
-            "resultado": "PENDENTE"
-        })
-
-        novo_sinal = True
-
-        enviar_telegram(
-            "🚨 NOVO SINAL EXPERIMENTAL\n"
-            "Ativo: EUR/USD\n"
-            f"Direção: {sinal}\n"
-            f"Entrada de referência: {entrada}\n"
-            f"Candle: {horario_candle}\n"
-            "Expiração simulada: 5 minutos"
+        existe = any(
+            s["horario_candle"] == horario_candle
+            for s in sinais
         )
+
+        if sinal != "AGUARDAR" and not existe:
+            sinais.append({
+                "direcao": sinal,
+                "horario_candle": horario_candle,
+                "entrada": entrada,
+                "resultado": "PENDENTE"
+            })
+
+            enviar_telegram(
+                "🚨 NOVO SINAL EXPERIMENTAL\n"
+                "Ativo: EUR/USD\n"
+                f"Direção: {sinal}\n"
+                f"Entrada de referência: {entrada}\n"
+                f"Candle: {horario_candle}\n"
+                "Expiração simulada: 5 minutos"
+            )
+    else:
+        print("Meta de 100 sinais registrados atingida.")
 
     salvar_historico(historico)
 
-    # Relatório somente quando houver resultado novo
     if mudou_resultado:
-
         relatorio = gerar_relatorio(historico)
-
         print(relatorio)
-
         enviar_telegram(relatorio)
 
-    else:
-        print("Nenhum resultado novo. Relatório não enviado.")
+    # Aviso único quando 100 sinais forem avaliados
+    avaliados = sum(
+        s["resultado"] != "PENDENTE" for s in sinais
+    )
 
+    if avaliados >= META and not historico["aviso_100_enviado"]:
+        enviar_telegram(
+            "🏁 TESTE DE 100 SINAIS CONCLUÍDO!\n\n"
+            + gerar_relatorio(historico)
+        )
+        historico["aviso_100_enviado"] = True
+
+    salvar_historico(historico)
     salvar_no_github()
 
 
 if __name__ == "__main__":
     try:
         executar()
-
     except Exception as erro:
         print("ERRO NO ROBO:", erro)
