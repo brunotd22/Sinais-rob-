@@ -28,6 +28,7 @@ def obter_candles(intervalo, quantidade=100):
         },
         timeout=30
     )
+
     resposta.raise_for_status()
     dados = resposta.json()
 
@@ -115,11 +116,7 @@ def avaliar_pendentes(historico, candles1):
             "%Y-%m-%d %H:%M:%S"
         )
 
-        # Candle de 5m abre antes da entrada.
-        # Entrada ocorre no fechamento desse candle.
         hora_entrada = hora_candle + timedelta(minutes=5)
-
-        # Expiração de 5 minutos após a entrada.
         hora_saida = hora_entrada + timedelta(minutes=5)
 
         candle_saida = None
@@ -130,8 +127,6 @@ def avaliar_pendentes(historico, candles1):
                 "%Y-%m-%d %H:%M:%S"
             )
 
-            # Usa exatamente o candle da expiração,
-            # e somente se ele já estiver fechado.
             if hora == hora_saida and hora <= limite_fechamento:
                 candle_saida = candle
                 break
@@ -158,18 +153,16 @@ def avaliar_pendentes(historico, candles1):
             "%Y-%m-%d %H:%M:%S"
         )
 
-        print(
-            f"Resultado simulado: {resultado} | "
-            f"Entrada: {entrada} | Saída: {saida}"
-        )
-
-        enviar_telegram(
+        mensagem = (
             "📊 RESULTADO SIMULADO\n"
             f"EUR/USD: {sinal['direcao']}\n"
             f"Entrada: {entrada}\n"
             f"Saída: {saida}\n"
             f"Resultado: {resultado}"
         )
+
+        print(mensagem)
+        enviar_telegram(mensagem)
 
         alterou = True
 
@@ -182,16 +175,19 @@ def gerar_relatorio(historico):
     acertos = sum(s["resultado"] == "ACERTO" for s in sinais)
     erros = sum(s["resultado"] == "ERRO" for s in sinais)
     empates = sum(s["resultado"] == "EMPATE" for s in sinais)
+    pendentes = sum(s["resultado"] == "PENDENTE" for s in sinais)
 
     total = acertos + erros
     percentual = (acertos / total) * 100 if total > 0 else 0
 
     return (
         "📈 DESEMPENHO SIMULADO\n"
+        "Ativo: EUR/USD\n"
         f"Sinais avaliados: {total}\n"
         f"Acertos: {acertos}\n"
         f"Erros: {erros}\n"
         f"Empates: {empates}\n"
+        f"Pendentes: {pendentes}\n"
         f"Taxa de acerto: {percentual:.1f}%"
     )
 
@@ -280,7 +276,11 @@ def executar():
 
     salvar_historico(historico)
 
-    print(gerar_relatorio(historico))
+    relatorio = gerar_relatorio(historico)
+
+    print(relatorio)
+
+    enviar_telegram(relatorio)
 
     salvar_no_github()
 
