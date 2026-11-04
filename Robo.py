@@ -146,9 +146,11 @@ def avaliar_pendentes(historico, candles1):
 
         sinal["saida"] = saida
         sinal["resultado"] = resultado
+
         sinal["horario_entrada"] = hora_entrada.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
+
         sinal["horario_saida"] = hora_saida.strftime(
             "%Y-%m-%d %H:%M:%S"
         )
@@ -178,7 +180,11 @@ def gerar_relatorio(historico):
     pendentes = sum(s["resultado"] == "PENDENTE" for s in sinais)
 
     total = acertos + erros
-    percentual = (acertos / total) * 100 if total > 0 else 0
+
+    percentual = (
+        (acertos / total) * 100
+        if total > 0 else 0
+    )
 
     return (
         "📈 DESEMPENHO SIMULADO\n"
@@ -239,16 +245,24 @@ def executar():
 
     historico = carregar_historico()
 
-    avaliar_pendentes(historico, candles1)
+    # Avalia sinais anteriores
+    mudou_resultado = avaliar_pendentes(
+        historico,
+        candles1
+    )
 
+    # Identifica nova direção
     if direcao5 == "ALTA" and direcao1 == "ALTA":
         sinal = "CALL"
+
     elif direcao5 == "BAIXA" and direcao1 == "BAIXA":
         sinal = "PUT"
+
     else:
         sinal = "AGUARDAR"
 
     candle_sinal = candles5[-2]
+
     horario_candle = candle_sinal["datetime"]
     entrada = float(candle_sinal["close"])
 
@@ -257,13 +271,19 @@ def executar():
         for s in historico["sinais"]
     )
 
+    novo_sinal = False
+
+    # Só envia se realmente for um sinal novo
     if sinal != "AGUARDAR" and not existe:
+
         historico["sinais"].append({
             "direcao": sinal,
             "horario_candle": horario_candle,
             "entrada": entrada,
             "resultado": "PENDENTE"
         })
+
+        novo_sinal = True
 
         enviar_telegram(
             "🚨 NOVO SINAL EXPERIMENTAL\n"
@@ -276,11 +296,17 @@ def executar():
 
     salvar_historico(historico)
 
-    relatorio = gerar_relatorio(historico)
+    # Relatório somente quando houver resultado novo
+    if mudou_resultado:
 
-    print(relatorio)
+        relatorio = gerar_relatorio(historico)
 
-    enviar_telegram(relatorio)
+        print(relatorio)
+
+        enviar_telegram(relatorio)
+
+    else:
+        print("Nenhum resultado novo. Relatório não enviado.")
 
     salvar_no_github()
 
@@ -288,5 +314,6 @@ def executar():
 if __name__ == "__main__":
     try:
         executar()
+
     except Exception as erro:
         print("ERRO NO ROBO:", erro)
