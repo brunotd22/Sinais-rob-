@@ -8,19 +8,19 @@ API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
-URL_CANDLES = "https://api.twelvedata.com/time_series"
+URL = "https://api.twelvedata.com/time_series"
 
 
-def obter_candles():
+def obter_candles(intervalo):
     parametros = {
         "symbol": "EUR/USD",
-        "interval": "5min",
+        "interval": intervalo,
         "outputsize": 50,
         "apikey": API_KEY
     }
 
     resposta = requests.get(
-        URL_CANDLES,
+        URL,
         params=parametros,
         timeout=30
     )
@@ -31,63 +31,47 @@ def obter_candles():
     if "values" not in dados:
         raise Exception(f"Erro Twelve Data: {dados}")
 
-    candles = list(reversed(dados["values"]))
-
-    if len(candles) < 22:
-        raise Exception("Candles insuficientes.")
-
-    return candles
+    return list(reversed(dados["values"]))
 
 
-def calcular_ema_series(valores, periodo):
-    multiplicador = 2 / (periodo + 1)
+def calcular_ema(valores, periodo):
     ema = sum(valores[:periodo]) / periodo
-    resultado = [None] * (periodo - 1)
-    resultado.append(ema)
+    multiplicador = 2 / (periodo + 1)
 
     for valor in valores[periodo:]:
-        ema = valor * multiplicador + ema * (1 - multiplicador)
-        resultado.append(ema)
+        ema = (
+            valor * multiplicador
+            + ema * (1 - multiplicador)
+        )
 
-    return resultado
+    return ema
 
 
-def analisar_sinal(candles):
+def analisar_tendencia(candles):
+    if len(candles) < 23:
+        return "NEUTRO"
+
+    # Usa o último candle fechado, não o candle em formação
     fechamentos = [
-        float(candle["close"])
-        for candle in candles
+        float(c["close"])
+        for c in candles[:-1]
     ]
 
-    ema9 = calcular_ema_series(fechamentos, 9)
-    ema21 = calcular_ema_series(fechamentos, 21)
+    ema9 = calcular_ema(fechamentos, 9)
+    ema21 = calcular_ema(fechamentos, 21)
 
-    anterior9 = ema9[-2]
-    anterior21 = ema21[-2]
-    atual9 = ema9[-1]
-    atual21 = ema21[-1]
-
-    ultimo = candles[-1]
+    ultimo = candles[-2]
 
     abertura = float(ultimo["open"])
     fechamento = float(ultimo["close"])
 
-    cruzou_para_cima = (
-        anterior9 <= anterior21
-        and atual9 > atual21
-    )
+    if ema9 > ema21 and fechamento > abertura:
+        return "ALTA"
 
-    cruzou_para_baixo = (
-        anterior9 >= anterior21
-        and atual9 < atual21
-    )
+    if ema9 < ema21 and fechamento < abertura:
+        return "BAIXA"
 
-    if cruzou_para_cima and fechamento > abertura:
-        return "CALL", atual9, atual21
-
-    if cruzou_para_baixo and fechamento < abertura:
-        return "PUT", atual9, atual21
-
-    return "AGUARDAR", atual9, atual21
+    return "NEUTRO"
 
 
 def enviar_telegram(mensagem):
@@ -118,16 +102,28 @@ def executar_robo():
         print("ERRO: Telegram não configurado.")
         return
 
-    candles = obter_candles()
+    candles5 = obter_candles("5min")
+    candles1 = obter_candles("1min")
 
-    sinal, ema9, ema21 = analisar_sinal(candles)
+    tendencia5 = analisar_tendencia(candles5)
+    tendencia1 = analisar_tendencia(candles1)
+
+    print("Tendência 5 minutos:", tendencia5)
+    print("Tendência 1 minuto:", tendencia1)
+
+    if tendencia5 == "ALTA" and tendencia1 == "ALTA":
+        sinal = "CALL"
+
+    elif tendencia5 == "BAIXA" and tendencia1 == "BAIXA":
+        sinal = "PUT"
+
+    else:
+        sinal = "AGUARDAR"
 
     print("Sinal:", sinal)
-    print("EMA 9:", ema9)
-    print("EMA 21:", ema21)
 
     if sinal == "AGUARDAR":
-        print("Nenhum alerta enviado.")
+        print("Sem confirmação. Telegram não enviado.")
         return
 
     horario = datetime.now(
@@ -135,13 +131,12 @@ def executar_robo():
     ).strftime("%d/%m/%Y %H:%M:%S")
 
     mensagem = (
-        "🚨 NOVO SINAL 🚨\n"
+        "🚨 SINAL CONFIRMADO 🚨\n"
         "━━━━━━━━━━━━━━\n"
-        f"Ativo: EUR/USD\n"
-        "Tempo gráfico: 5 minutos\n"
+        "Ativo: EUR/USD\n"
+        "Tendência: 5 minutos\n"
+        "Confirmação: 1 minuto\n"
         f"Direção: {sinal}\n"
-        f"EMA 9: {ema9:.5f}\n"
-        f"EMA 21: {ema21:.5f}\n"
         f"Horário: {horario}\n"
         "━━━━━━━━━━━━━━\n"
         "⚠️ Sinal experimental."
