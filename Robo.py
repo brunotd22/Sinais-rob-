@@ -13,6 +13,7 @@ GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 URL = "https://api.twelvedata.com/time_series"
 ARQUIVO = "historico.json"
+FUSO = ZoneInfo("America/Sao_Paulo")
 
 
 def obter_candles(intervalo, quantidade=100):
@@ -22,11 +23,11 @@ def obter_candles(intervalo, quantidade=100):
             "symbol": "EUR/USD",
             "interval": intervalo,
             "outputsize": quantidade,
+            "timezone": "America/Sao_Paulo",
             "apikey": API_KEY
         },
         timeout=30
     )
-
     resposta.raise_for_status()
     dados = resposta.json()
 
@@ -47,10 +48,7 @@ def calcular_ema(valores, periodo):
 
 
 def tendencia(candles):
-    fechamentos = [
-        float(c["close"])
-        for c in candles[:-1]
-    ]
+    fechamentos = [float(c["close"]) for c in candles[:-1]]
 
     if len(fechamentos) < 22:
         return "NEUTRO"
@@ -99,37 +97,42 @@ def carregar_historico():
 
 def salvar_historico(historico):
     with open(ARQUIVO, "w", encoding="utf-8") as arquivo:
-        json.dump(
-            historico,
-            arquivo,
-            indent=2,
-            ensure_ascii=False
-        )
+        json.dump(historico, arquivo, indent=2, ensure_ascii=False)
 
 
 def avaliar_pendentes(historico, candles1):
     alterou = False
 
+    agora = datetime.now(FUSO).replace(tzinfo=None)
+    limite_fechamento = agora - timedelta(minutes=1)
+
     for sinal in historico["sinais"]:
         if sinal["resultado"] != "PENDENTE":
             continue
 
-        entrada_hora = datetime.strptime(
+        hora_candle = datetime.strptime(
             sinal["horario_candle"],
             "%Y-%m-%d %H:%M:%S"
         )
 
-        hora_saida = entrada_hora + timedelta(minutes=5)
+        # Candle de 5m abre antes da entrada.
+        # Entrada ocorre no fechamento desse candle.
+        hora_entrada = hora_candle + timedelta(minutes=5)
+
+        # Expiração de 5 minutos após a entrada.
+        hora_saida = hora_entrada + timedelta(minutes=5)
 
         candle_saida = None
 
         for candle in candles1:
-            hora_candle = datetime.strptime(
+            hora = datetime.strptime(
                 candle["datetime"],
                 "%Y-%m-%d %H:%M:%S"
             )
 
-            if hora_candle >= hora_saida:
+            # Usa exatamente o candle da expiração,
+            # e somente se ele já estiver fechado.
+            if hora == hora_saida and hora <= limite_fechamento:
                 candle_saida = candle
                 break
 
@@ -139,14 +142,21 @@ def avaliar_pendentes(historico, candles1):
         entrada = float(sinal["entrada"])
         saida = float(candle_saida["close"])
 
-        if sinal["direcao"] == "CALL":
+        if saida == entrada:
+            resultado = "EMPATE"
+        elif sinal["direcao"] == "CALL":
             resultado = "ACERTO" if saida > entrada else "ERRO"
         else:
             resultado = "ACERTO" if saida < entrada else "ERRO"
 
         sinal["saida"] = saida
         sinal["resultado"] = resultado
-        sinal["horario_saida"] = candle_saida["datetime"]
+        sinal["horario_entrada"] = hora_entrada.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
+        sinal["horario_saida"] = hora_saida.strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
         print(
             f"Resultado simulado: {resultado} | "
@@ -169,26 +179,19 @@ def avaliar_pendentes(historico, candles1):
 def gerar_relatorio(historico):
     sinais = historico["sinais"]
 
-    acertos = sum(
-        s["resultado"] == "ACERTO" for s in sinais
-    )
-
-    erros = sum(
-        s["resultado"] == "ERRO" for s in sinais
-    )
+    acertos = sum(s["resultado"] == "ACERTO" for s in sinais)
+    erros = sum(s["resultado"] == "ERRO" for s in sinais)
+    empates = sum(s["resultado"] == "EMPATE" for s in sinais)
 
     total = acertos + erros
-
-    percentual = (
-        (acertos / total) * 100
-        if total > 0 else 0
-    )
+    percentual = (acertos / total) * 100 if total > 0 else 0
 
     return (
         "📈 DESEMPENHO SIMULADO\n"
         f"Sinais avaliados: {total}\n"
         f"Acertos: {acertos}\n"
         f"Erros: {erros}\n"
+        f"Empates: {empates}\n"
         f"Taxa de acerto: {percentual:.1f}%"
     )
 
@@ -268,7 +271,7 @@ def executar():
 
         enviar_telegram(
             "🚨 NOVO SINAL EXPERIMENTAL\n"
-            f"Ativo: EUR/USD\n"
+            "Ativo: EUR/USD\n"
             f"Direção: {sinal}\n"
             f"Entrada de referência: {entrada}\n"
             f"Candle: {horario_candle}\n"
