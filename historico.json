@@ -1,0 +1,10 @@
+{
+  "sinais": [
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-04 15:00:00",
+      "entrada": 1.12467,
+      "resultado": "PENDENTE"
+    }
+  ]
+}
