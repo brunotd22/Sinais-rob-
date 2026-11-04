@@ -1,27 +1,29 @@
 
 import os
+import json
 import requests
-from datetime import datetime
+import subprocess
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
+GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 
 URL = "https://api.twelvedata.com/time_series"
+ARQUIVO = "historico.json"
 
 
-def obter_candles(intervalo):
-    parametros = {
-        "symbol": "EUR/USD",
-        "interval": intervalo,
-        "outputsize": 50,
-        "apikey": API_KEY
-    }
-
+def obter_candles(intervalo, quantidade=100):
     resposta = requests.get(
         URL,
-        params=parametros,
+        params={
+            "symbol": "EUR/USD",
+            "interval": intervalo,
+            "outputsize": quantidade,
+            "apikey": API_KEY
+        },
         timeout=30
     )
 
@@ -36,32 +38,27 @@ def obter_candles(intervalo):
 
 def calcular_ema(valores, periodo):
     ema = sum(valores[:periodo]) / periodo
-    multiplicador = 2 / (periodo + 1)
+    fator = 2 / (periodo + 1)
 
     for valor in valores[periodo:]:
-        ema = (
-            valor * multiplicador
-            + ema * (1 - multiplicador)
-        )
+        ema = valor * fator + ema * (1 - fator)
 
     return ema
 
 
-def analisar_tendencia(candles):
-    if len(candles) < 23:
-        return "NEUTRO"
-
-    # Usa o último candle fechado, não o candle em formação
+def tendencia(candles):
     fechamentos = [
         float(c["close"])
         for c in candles[:-1]
     ]
 
+    if len(fechamentos) < 22:
+        return "NEUTRO"
+
     ema9 = calcular_ema(fechamentos, 9)
     ema21 = calcular_ema(fechamentos, 21)
 
     ultimo = candles[-2]
-
     abertura = float(ultimo["open"])
     fechamento = float(ultimo["close"])
 
@@ -74,17 +71,16 @@ def analisar_tendencia(candles):
     return "NEUTRO"
 
 
-def enviar_telegram(mensagem):
-    url = (
-        f"https://api.telegram.org/"
-        f"bot{TELEGRAM_TOKEN}/sendMessage"
-    )
+def enviar_telegram(texto):
+    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
+        print("Telegram não configurado.")
+        return
 
     resposta = requests.post(
-        url,
+        f"https://api.telegram.org/bot{TELEGRAM_TOKEN}/sendMessage",
         data={
             "chat_id": TELEGRAM_CHAT_ID,
-            "text": mensagem
+            "text": texto
         },
         timeout=30
     )
@@ -93,60 +89,201 @@ def enviar_telegram(mensagem):
     print("Mensagem enviada ao Telegram!")
 
 
-def executar_robo():
-    if not API_KEY:
-        print("ERRO: Twelve Data não configurada.")
+def carregar_historico():
+    if not os.path.exists(ARQUIVO):
+        return {"sinais": []}
+
+    with open(ARQUIVO, "r", encoding="utf-8") as arquivo:
+        return json.load(arquivo)
+
+
+def salvar_historico(historico):
+    with open(ARQUIVO, "w", encoding="utf-8") as arquivo:
+        json.dump(
+            historico,
+            arquivo,
+            indent=2,
+            ensure_ascii=False
+        )
+
+
+def avaliar_pendentes(historico, candles1):
+    alterou = False
+
+    for sinal in historico["sinais"]:
+        if sinal["resultado"] != "PENDENTE":
+            continue
+
+        entrada_hora = datetime.strptime(
+            sinal["horario_candle"],
+            "%Y-%m-%d %H:%M:%S"
+        )
+
+        hora_saida = entrada_hora + timedelta(minutes=5)
+
+        candle_saida = None
+
+        for candle in candles1:
+            hora_candle = datetime.strptime(
+                candle["datetime"],
+                "%Y-%m-%d %H:%M:%S"
+            )
+
+            if hora_candle >= hora_saida:
+                candle_saida = candle
+                break
+
+        if candle_saida is None:
+            continue
+
+        entrada = float(sinal["entrada"])
+        saida = float(candle_saida["close"])
+
+        if sinal["direcao"] == "CALL":
+            resultado = "ACERTO" if saida > entrada else "ERRO"
+        else:
+            resultado = "ACERTO" if saida < entrada else "ERRO"
+
+        sinal["saida"] = saida
+        sinal["resultado"] = resultado
+        sinal["horario_saida"] = candle_saida["datetime"]
+
+        print(
+            f"Resultado simulado: {resultado} | "
+            f"Entrada: {entrada} | Saída: {saida}"
+        )
+
+        enviar_telegram(
+            "📊 RESULTADO SIMULADO\n"
+            f"EUR/USD: {sinal['direcao']}\n"
+            f"Entrada: {entrada}\n"
+            f"Saída: {saida}\n"
+            f"Resultado: {resultado}"
+        )
+
+        alterou = True
+
+    return alterou
+
+
+def gerar_relatorio(historico):
+    sinais = historico["sinais"]
+
+    acertos = sum(
+        s["resultado"] == "ACERTO" for s in sinais
+    )
+
+    erros = sum(
+        s["resultado"] == "ERRO" for s in sinais
+    )
+
+    total = acertos + erros
+
+    percentual = (
+        (acertos / total) * 100
+        if total > 0 else 0
+    )
+
+    return (
+        "📈 DESEMPENHO SIMULADO\n"
+        f"Sinais avaliados: {total}\n"
+        f"Acertos: {acertos}\n"
+        f"Erros: {erros}\n"
+        f"Taxa de acerto: {percentual:.1f}%"
+    )
+
+
+def salvar_no_github():
+    if not GITHUB_TOKEN:
+        print("GITHUB_TOKEN não configurado.")
         return
 
-    if not TELEGRAM_TOKEN or not TELEGRAM_CHAT_ID:
-        print("ERRO: Telegram não configurado.")
+    subprocess.run(
+        ["git", "config", "user.name", "Robo de Sinais"],
+        check=True
+    )
+
+    subprocess.run(
+        ["git", "config", "user.email", "bot@github.com"],
+        check=True
+    )
+
+    subprocess.run(["git", "add", ARQUIVO], check=True)
+
+    resultado = subprocess.run(
+        ["git", "diff", "--cached", "--quiet"]
+    )
+
+    if resultado.returncode == 0:
+        print("Histórico sem alterações.")
         return
 
+    subprocess.run(
+        ["git", "commit", "-m", "Atualizar histórico de sinais"],
+        check=True
+    )
+
+    subprocess.run(["git", "push"], check=True)
+
+    print("Histórico salvo no GitHub!")
+
+
+def executar():
     candles5 = obter_candles("5min")
     candles1 = obter_candles("1min")
 
-    tendencia5 = analisar_tendencia(candles5)
-    tendencia1 = analisar_tendencia(candles1)
+    direcao5 = tendencia(candles5)
+    direcao1 = tendencia(candles1)
 
-    print("Tendência 5 minutos:", tendencia5)
-    print("Tendência 1 minuto:", tendencia1)
+    print("Tendência 5m:", direcao5)
+    print("Tendência 1m:", direcao1)
 
-    if tendencia5 == "ALTA" and tendencia1 == "ALTA":
+    historico = carregar_historico()
+
+    avaliar_pendentes(historico, candles1)
+
+    if direcao5 == "ALTA" and direcao1 == "ALTA":
         sinal = "CALL"
-
-    elif tendencia5 == "BAIXA" and tendencia1 == "BAIXA":
+    elif direcao5 == "BAIXA" and direcao1 == "BAIXA":
         sinal = "PUT"
-
     else:
         sinal = "AGUARDAR"
 
-    print("Sinal:", sinal)
+    candle_sinal = candles5[-2]
+    horario_candle = candle_sinal["datetime"]
+    entrada = float(candle_sinal["close"])
 
-    if sinal == "AGUARDAR":
-        print("Sem confirmação. Telegram não enviado.")
-        return
-
-    horario = datetime.now(
-        ZoneInfo("America/Sao_Paulo")
-    ).strftime("%d/%m/%Y %H:%M:%S")
-
-    mensagem = (
-        "🚨 SINAL CONFIRMADO 🚨\n"
-        "━━━━━━━━━━━━━━\n"
-        "Ativo: EUR/USD\n"
-        "Tendência: 5 minutos\n"
-        "Confirmação: 1 minuto\n"
-        f"Direção: {sinal}\n"
-        f"Horário: {horario}\n"
-        "━━━━━━━━━━━━━━\n"
-        "⚠️ Sinal experimental."
+    existe = any(
+        s["horario_candle"] == horario_candle
+        for s in historico["sinais"]
     )
 
-    enviar_telegram(mensagem)
+    if sinal != "AGUARDAR" and not existe:
+        historico["sinais"].append({
+            "direcao": sinal,
+            "horario_candle": horario_candle,
+            "entrada": entrada,
+            "resultado": "PENDENTE"
+        })
+
+        enviar_telegram(
+            "🚨 NOVO SINAL EXPERIMENTAL\n"
+            f"Ativo: EUR/USD\n"
+            f"Direção: {sinal}\n"
+            f"Entrada de referência: {entrada}\n"
+            f"Candle: {horario_candle}\n"
+            "Expiração simulada: 5 minutos"
+        )
+
+    salvar_historico(historico)
+
+    print(gerar_relatorio(historico))
+
+    salvar_no_github()
 
 
 if __name__ == "__main__":
     try:
-        executar_robo()
+        executar()
     except Exception as erro:
         print("ERRO NO ROBO:", erro)
