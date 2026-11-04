@@ -1,42 +1,89 @@
 
 import os
 import requests
+from datetime import datetime
+from zoneinfo import ZoneInfo
 
 API_KEY = os.getenv("TWELVE_DATA_API_KEY")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID")
 
+URL_CANDLES = "https://api.twelvedata.com/time_series"
 
-def obter_cotacao():
-    if not API_KEY:
-        print("ERRO: Chave da Twelve Data não configurada.")
-        return None
 
-    url = "https://api.twelvedata.com/price"
-
+def obter_candles():
     parametros = {
         "symbol": "EUR/USD",
+        "interval": "5min",
+        "outputsize": 50,
         "apikey": API_KEY
     }
 
-    try:
-        resposta = requests.get(
-            url, params=parametros, timeout=20
+    resposta = requests.get(
+        URL_CANDLES,
+        params=parametros,
+        timeout=30
+    )
+
+    resposta.raise_for_status()
+    dados = resposta.json()
+
+    if "values" not in dados:
+        raise Exception(f"Erro Twelve Data: {dados}")
+
+    candles = dados["values"]
+
+    if len(candles) < 22:
+        raise Exception("Candles insuficientes para análise.")
+
+    return candles
+
+
+def calcular_ema(valores, periodo):
+    multiplicador = 2 / (periodo + 1)
+    ema = sum(valores[:periodo]) / periodo
+
+    for valor in valores[periodo:]:
+        ema = (valor * multiplicador) + (
+            ema * (1 - multiplicador)
         )
-        resposta.raise_for_status()
-        dados = resposta.json()
 
-        if "price" in dados:
-            preco = dados["price"]
-            print("EUR/USD:", preco)
-            return preco
+    return ema
 
-        print("ERRO DA API:", dados)
-        return None
 
-    except requests.RequestException as erro:
-        print("ERRO DE CONEXÃO:", erro)
-        return None
+def analisar_sinal(candles):
+    candles = list(reversed(candles))
+
+    fechamentos = [
+        float(candle["close"])
+        for candle in candles
+    ]
+
+    ema9 = calcular_ema(fechamentos, 9)
+    ema21 = calcular_ema(fechamentos, 21)
+
+    ultimo = candles[-1]
+    anterior = candles[-2]
+
+    abertura = float(ultimo["open"])
+    fechamento = float(ultimo["close"])
+    fechamento_anterior = float(anterior["close"])
+
+    if (
+        ema9 > ema21
+        and fechamento > abertura
+        and fechamento > fechamento_anterior
+    ):
+        return "CALL", ema9, ema21
+
+    if (
+        ema9 < ema21
+        and fechamento < abertura
+        and fechamento < fechamento_anterior
+    ):
+        return "PUT", ema9, ema21
+
+    return "AGUARDAR", ema9, ema21
 
 
 def enviar_telegram(mensagem):
@@ -45,41 +92,57 @@ def enviar_telegram(mensagem):
         return
 
     url = (
-        "https://api.telegram.org/bot"
-        + TELEGRAM_TOKEN
-        + "/sendMessage"
+        f"https://api.telegram.org/"
+        f"bot{TELEGRAM_TOKEN}/sendMessage"
     )
 
-    dados = {
-        "chat_id": TELEGRAM_CHAT_ID,
-        "text": mensagem
-    }
+    resposta = requests.post(
+        url,
+        data={
+            "chat_id": TELEGRAM_CHAT_ID,
+            "text": mensagem
+        },
+        timeout=30
+    )
 
-    try:
-        resposta = requests.post(
-            url, json=dados, timeout=20
-        )
-        resposta.raise_for_status()
+    resposta.raise_for_status()
 
-        resultado = resposta.json()
+    print("Mensagem enviada ao Telegram!")
 
-        if resultado.get("ok"):
-            print("Mensagem enviada ao Telegram!")
-        else:
-            print("ERRO TELEGRAM:", resultado)
 
-    except requests.RequestException as erro:
-        print("ERRO TELEGRAM:", erro)
+def executar_robo():
+    if not API_KEY:
+        print("ERRO: Twelve Data não configurada.")
+        return
+
+    candles = obter_candles()
+
+    sinal, ema9, ema21 = analisar_sinal(candles)
+
+    horario = datetime.now(
+        ZoneInfo("America/Sao_Paulo")
+    ).strftime("%d/%m/%Y %H:%M:%S")
+
+    mensagem = (
+        "🤖 ROBO DE SINAIS\n"
+        "━━━━━━━━━━━━━━\n"
+        "Ativo: EUR/USD\n"
+        "Tempo gráfico: 5 minutos\n"
+        f"Sinal: {sinal}\n"
+        f"EMA 9: {ema9:.5f}\n"
+        f"EMA 21: {ema21:.5f}\n"
+        f"Horário: {horario}\n"
+        "━━━━━━━━━━━━━━\n"
+        "⚠️ Sinal experimental."
+    )
+
+    print(mensagem)
+
+    enviar_telegram(mensagem)
 
 
 if __name__ == "__main__":
-    preco = obter_cotacao()
-
-    if preco:
-        mensagem = (
-            "ROBO DE SINAIS\n"
-            "Conexao funcionando!\n"
-            "EUR/USD: " + str(preco)
-        )
-
-        enviar_telegram(mensagem)
+    try:
+        executar_robo()
+    except Exception as erro:
+        print("ERRO NO ROBO:", erro)
