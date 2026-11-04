@@ -7,6 +7,12 @@
       "resultado": "ACERTO",
       "saida": 1.1249,
       "horario_saida": "2026-11-04 15:05:00"
+    },
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-04 01:30:00",
+      "entrada": 1.12558,
+      "resultado": "PENDENTE"
     }
   ]
 }
