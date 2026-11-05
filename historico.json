@@ -70,6 +70,12 @@
       "saida": 1.1231,
       "horario_entrada": "2026-11-05 06:55:00",
       "horario_saida": "2026-11-05 07:00:00"
+    },
+    {
+      "direcao": "PUT",
+      "horario_candle": "2026-11-05 11:15:00",
+      "entrada": 1.12143,
+      "resultado": "PENDENTE"
     }
   ],
   "aviso_100_enviado": false
