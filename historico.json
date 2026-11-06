@@ -138,7 +138,10 @@
       "direcao": "PUT",
       "horario_candle": "2026-11-06 03:25:00",
       "entrada": 1.11927,
-      "resultado": "PENDENTE"
+      "resultado": "ACERTO",
+      "saida": 1.11919,
+      "horario_entrada": "2026-11-06 03:30:00",
+      "horario_saida": "2026-11-06 03:35:00"
     }
   ],
   "aviso_100_enviado": false
