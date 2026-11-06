@@ -183,6 +183,15 @@
       "direcao": "CALL",
       "horario_candle": "2026-11-06 19:40:00",
       "entrada": 1.11503,
+      "resultado": "ERRO",
+      "saida": 1.11455,
+      "horario_entrada": "2026-11-06 19:45:00",
+      "horario_saida": "2026-11-06 19:50:00"
+    },
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-06 20:15:00",
+      "entrada": 1.11472,
       "resultado": "PENDENTE"
     }
   ],
