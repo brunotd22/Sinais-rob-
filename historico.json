@@ -313,6 +313,12 @@
       "saida": 1.12071,
       "horario_entrada": "2026-11-09 15:30:00",
       "horario_saida": "2026-11-09 15:35:00"
+    },
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-09 17:25:00",
+      "entrada": 1.12232,
+      "resultado": "PENDENTE"
     }
   ],
   "aviso_100_enviado": false
