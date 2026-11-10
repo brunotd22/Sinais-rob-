@@ -381,6 +381,15 @@
       "direcao": "PUT",
       "horario_candle": "2026-11-10 18:10:00",
       "entrada": 1.11621,
+      "resultado": "ERRO",
+      "saida": 1.11645,
+      "horario_entrada": "2026-11-10 18:15:00",
+      "horario_saida": "2026-11-10 18:20:00"
+    },
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-10 18:50:00",
+      "entrada": 1.11639,
       "resultado": "PENDENTE"
     }
   ],
