@@ -444,7 +444,10 @@
       "direcao": "CALL",
       "horario_candle": "2026-11-11 22:55:00",
       "entrada": 1.10963,
-      "resultado": "PENDENTE"
+      "resultado": "ACERTO",
+      "saida": 1.1097,
+      "horario_entrada": "2026-11-11 23:00:00",
+      "horario_saida": "2026-11-11 23:05:00"
     }
   ],
   "aviso_100_enviado": false
