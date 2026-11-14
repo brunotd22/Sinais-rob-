@@ -520,6 +520,12 @@
       "saida": 1.1022,
       "horario_entrada": "2026-11-14 10:10:00",
       "horario_saida": "2026-11-14 10:15:00"
+    },
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-14 11:40:00",
+      "entrada": 1.1023,
+      "resultado": "PENDENTE"
     }
   ],
   "aviso_100_enviado": false
