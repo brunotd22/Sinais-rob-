@@ -525,7 +525,10 @@
       "direcao": "CALL",
       "horario_candle": "2026-11-14 11:40:00",
       "entrada": 1.1023,
-      "resultado": "PENDENTE"
+      "resultado": "ERRO",
+      "saida": 1.10229,
+      "horario_entrada": "2026-11-14 11:45:00",
+      "horario_saida": "2026-11-14 11:50:00"
     }
   ],
   "aviso_100_enviado": false
