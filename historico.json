@@ -718,6 +718,12 @@
       "saida": 1.09774,
       "horario_entrada": "2026-11-18 07:05:00",
       "horario_saida": "2026-11-18 07:10:00"
+    },
+    {
+      "direcao": "CALL",
+      "horario_candle": "2026-11-18 10:30:00",
+      "entrada": 1.09719,
+      "resultado": "PENDENTE"
     }
   ],
   "aviso_100_enviado": false
