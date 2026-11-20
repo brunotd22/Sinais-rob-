@@ -804,7 +804,10 @@
       "direcao": "CALL",
       "horario_candle": "2026-11-20 02:55:00",
       "entrada": 1.09784,
-      "resultado": "PENDENTE"
+      "resultado": "ACERTO",
+      "saida": 1.09806,
+      "horario_entrada": "2026-11-20 03:00:00",
+      "horario_saida": "2026-11-20 03:05:00"
     }
   ],
   "aviso_100_enviado": false
