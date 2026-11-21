@@ -822,7 +822,10 @@
       "direcao": "PUT",
       "horario_candle": "2026-11-21 07:20:00",
       "entrada": 1.09679,
-      "resultado": "PENDENTE"
+      "resultado": "EMPATE",
+      "saida": 1.09679,
+      "horario_entrada": "2026-11-21 07:25:00",
+      "horario_saida": "2026-11-21 07:30:00"
     }
   ],
   "aviso_100_enviado": false
